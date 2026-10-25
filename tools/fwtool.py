@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Samsung A-series monitor firmware (FALCON / M-A8000SGZA) container tool.
 
-Формат (проверено на 1013.0 и 1014.0):
+Format, verified on releases 1013.0 and 1014.0:
 
-  * 2 MiB, 32 страницы по 64 KiB, каждая начинается с таблицы векторов 8051;
-  * строка версии `M-A8000SGZA-XXXX.Y` в единственном экземпляре по 0xD5826;
-  * контрольная сумма = сумма всех байт по модулю 0x10000, она же тег [XXXX]
-    в имени файла.
+  * 2 MiB, 32 pages of 64 KiB, each page starts with an 8051 vector table;
+  * the version string `M-A8000SGZA-XXXX.Y` appears once, at offset 0xD5826;
+  * checksum = sum of all bytes modulo 0x10000, also the [XXXX] tag in the name.
 
-Использование:
-  fwtool.py info   <bin>                       — размер, версия, тег, модели, слоты
-  fwtool.py verify <bin>                       — сверить тег из имени файла с суммой
-  fwtool.py retag  <src> <dst> [версия]        — записать копию с новой версией и тегом
+Usage:
+  fwtool.py info   <bin>                    show size, version, tag, models, pages
+  fwtool.py verify <bin>                    compare the name tag with the checksum
+  fwtool.py retag  <src> <dst> [version]    write a copy with a new version and tag
 """
 import re
 import sys
@@ -47,7 +46,7 @@ def cmd_info(path: str) -> int:
     print(f"models      : {', '.join(models) if models else '<none>'}")
     print(f"data up to  : 0x{used:X}")
     print(f"'DUALFW' at : {', '.join(hex(m) for m in markers[:4])}"
-          f"{' …' if len(markers) > 4 else ''} ({len(markers)} total)")
+          f"{' ...' if len(markers) > 4 else ''} ({len(markers)} total)")
     if len(data) != SIZE:
         print(f"warning     : expected {SIZE} bytes", file=sys.stderr)
         return 1
@@ -60,7 +59,7 @@ def cmd_verify(path: str) -> int:
     computed = tag(data)
     m = TAG_RE.search(p.name)
     if not m:
-        print(f"{p.name}: no [TAG] in filename; computed [{computed:04X}]")
+        print(f"{p.name}: no [TAG] in the file name; computed [{computed:04X}]")
         return 1
     ok = int(m.group(1), 16) == computed
     print(f"{p.name}: tag {m.group(1).upper()} vs computed {computed:04X} -> "

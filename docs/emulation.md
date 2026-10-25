@@ -1,82 +1,84 @@
-# Эмуляция
+# Emulation
 
-## Почему не QEMU
+## Why not QEMU
 
-В QEMU нет таргета для 8051/MCS-51 — ни ядра, ни машины. Ближайший аналог по
-сложности — `target/avr` (137 КБ C + 29 КБ машины), то есть 4–8 недель на ядро
-и ещё столько же на периферию. Для этой задачи это не окупается: всё
-содержательное — модель конкретного скалера, а не ядра.
+QEMU has no 8051/MCS-51 target. It has no CPU model and no machine for it.
+The closest existing target is `target/avr`: 137 KB of C plus 29 KB of machine code.
+A new target would take 4 to 8 weeks for the core, and as long again for peripherals.
+The cost is high. The gain is zero for this task: the value is in the machine model,
+not in the CPU core.
 
-## Что используется
+## What we use
 
-[emu8051](https://github.com/jarikomppa/emu8051) — MIT, ANSI C, ~4 тыс. строк,
-полный набор инструкций 8051/8052, таймеры, прерывания и колбэки на SFR и XDATA.
-`bankemu.c` добавляет поверх него то, чего нет в референсном эмуляторе:
+[jarikomppa/emu8051](https://github.com/jarikomppa/emu8051): MIT, ANSI C,
+about 4 thousand lines, full 8051/8052 instruction set, timers, interrupts,
+and callbacks for SFR and XDATA.
 
-- **32 банка кода** по `P1[4:0]` (указатель `mCodeMem` переставляется на банк);
-- **полные 256 байт IRAM** (`mUpperData` обязателен, иначе верхние 128 уходят в SFR);
-- **MMIO с чтением записанного**: чтение регистра возвращает последнее записанное
-  значение, а не константу;
-- **модель второй подсистемы**: mailbox `0xFDF6/0xFDF7` (запрос `0x41` → ответ `0x81`);
-- **pty для UART** — лог монитора идёт живьём;
-- **инъекция событий** по номеру опкода.
+`bankemu.c` adds what the reference emulator does not have:
 
-## Сборка и запуск
+- **32 code banks** selected by `P1[4:0]` (the `mCodeMem` pointer moves to the bank);
+- **full 256-byte IRAM** (`mUpperData` is required, or the upper 128 bytes alias SFRs);
+- **MMIO read-back**: a register read returns the last written value, not a constant;
+- **second subsystem model**: mailbox `0xFDF6/0xFDF7` (request `0x41` → answer `0x81`);
+- **pty for UART**: the monitor log goes to a terminal;
+- **event injection** by opcode number.
+
+## Build and run
 
 ```bash
-make emu                       # клонирует emu8051 и собирает bankemu
-cd emu
-./bankemu ../fw/<образ>.Bin 40000000
+make emu                       # fetches the pinned core, applies the patch, builds
+PEER=1 STUBS="0xD511=0x17,0xF012=0x01" ./emu/bankemu fw/<image>.Bin 40000000
 ```
 
-Переменные окружения:
+Options:
 
-| Переменная | Смысл |
+| Variable | Meaning |
 |---|---|
-| `STUBS="0xADDR=0xVAL,…"` | принудительные значения MMIO-регистров |
-| `PEER=1` | включить модель второй подсистемы (mailbox) |
-| `PTY=1` | UART в pty, путь печатается в stderr |
-| `EVENTS="5000000:0xD511=0xFF;9000000:reset"` | события по номеру опкода |
-| `WATCH=0xADDR` | трасса первых 12 обращений к адресу с PC и банком |
-| `XTRACE=1` | карта окна `0xA000..0xBFFF` |
-| `SEEDR="0xADDR:0xLEN:0xVAL"` | подстановка при чтении, пока ячейка нулевая |
-| `HALT_ERASED=1` | остановиться, если PC ушёл в непрошитую область |
-| `GAP=1` | гистограмма инструкций в окне времени |
+| `STUBS="0xADDR=0xVAL,…"` | forced values for MMIO registers |
+| `PEER=1` | enable the second subsystem model (mailbox) |
+| `PTY=1` | UART to a pty; the path goes to stderr |
+| `EVENTS="5000000:0xD511=0xFF;9000000:reset"` | events by opcode number |
+| `WATCH=0xADDR` | trace the first 12 accesses to an address, with PC and bank |
+| `XTRACE=1` | map of the `0xA000..0xBFFF` window |
+| `SEEDR="0xADDR:0xLEN:0xVAL"` | substitute on read while the cell is zero |
+| `HALT_ERASED=1` | stop when PC enters unprogrammed flash |
+| `GAP=1` | instruction histogram for a time window |
 
-Минимальный набор, с которым прошивка проходит инициализацию:
+## What works
 
-```bash
-PEER=1 STUBS="0xD511=0x17,0xF012=0x01" ./bankemu ../fw/<образ>.Bin 40000000
-```
+- The firmware starts at the reset vector, switches banks, and services the timer.
+- It completes `InitCop`, reads its version and panel info from flash, and drives HPD.
+- It writes its log to UART.
+- It enters the normal sleep state, as on hardware without a signal.
 
-## Чего достигнуто
-
-- прошивка стартует с reset-вектора, переключает банки, обслуживает таймер;
-- проходит `InitCop`, читает свою версию и panel info из флеша, управляет HPD;
-- пишет лог в UART;
-- уходит в штатный сон, как на железе без сигнала.
-
-Замер собственной работы прошивки (1 тик = 1 машинный цикл, при 12 МГц = 1 мкс):
+Measured firmware time (1 tick = 1 machine cycle; at 12 MHz, 1 µs):
 
 ```
 0.0 ms    sr = 0
 30.8 ms   InitCop Start
-441.1 ms  ShareMemory Size : 0x1800     (очистка 64 КБ XRAM)
+441.1 ms  ShareMemory Size : 0x1800     (clear 64 KiB of XRAM)
 442.2 ms  InitCop End
 452.7 ms  [S/W Version] M-A8000SGZA-1014.0
 490.1 ms  [Panel Info] …
 ```
 
-То есть на саму инициализацию уходит около полусекунды; многократные секунды
-при включении — это железо (питание панели, HDMI/HDCP-хендшейк), не код.
+Init takes about half a second. Multi-second power-on delays come from hardware:
+panel power, HDMI/HDCP handshake. They do not come from this code.
 
-## Чего не хватает
+## What is missing
 
-- содержимое общей памяти (`ShareMemory Size : 0x1800`), которую заполняет
-  вторая подсистема;
-- типы сообщений `MailBox_Handler` (страница 24);
-- семантика `0xD511`/`0xD510` для пробуждения из сна;
-- модель видеоблока (OSD, тайминги панели) — её прошивки в образе нет.
+- The contents of shared memory (`ShareMemory Size : 0x1800`), which the second
+  subsystem fills.
+- The message types of `MailBox_Handler` (page 24).
+- The meaning of `0xD511` and `0xD510` for wake-up.
+- A model of the video block (OSD, panel timings). Its firmware is not in this image.
 
-Из-за этого после `[HPD] Set HPD Low` модель уходит в непрошитую область:
-прошивка ждёт ответа, которого эмулятор дать не может.
+As a result, after `[HPD] Set HPD Low` the model runs into unprogrammed flash:
+the firmware waits for an answer that the emulator cannot give.
+
+## Emulator patch
+
+`emu/patches/0001-interrupt-latch-on-ret.patch` clears the in-service latch on
+`RET`. Without it, interrupts stop after the first one, because this firmware
+sometimes leaves an ISR through a bank trampoline instead of `RETI`.
+`make emu` applies the patch automatically to the pinned upstream commit.

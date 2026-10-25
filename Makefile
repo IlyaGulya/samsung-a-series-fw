@@ -1,5 +1,7 @@
 EMU_REPO := https://github.com/jarikomppa/emu8051.git
 EMU_DIR  := emu/emu8051
+# pinned commit: upstream is dormant, but master is not a guarantee
+EMU_SHA  := 5dc681275151c4a5d7b85ec9ff4ceb1b25abd5a8
 CORE     := $(EMU_DIR)/core.c $(EMU_DIR)/opcodes.c $(EMU_DIR)/disasm.c
 
 .PHONY: all emu fetch test clean
@@ -7,7 +9,11 @@ CORE     := $(EMU_DIR)/core.c $(EMU_DIR)/opcodes.c $(EMU_DIR)/disasm.c
 all: emu
 
 $(EMU_DIR):
-	git clone --depth 1 $(EMU_REPO) $(EMU_DIR)
+	git init -q $(EMU_DIR)
+	git -C $(EMU_DIR) remote add origin $(EMU_REPO)
+	git -C $(EMU_DIR) fetch -q --depth 1 origin $(EMU_SHA)
+	git -C $(EMU_DIR) checkout -q FETCH_HEAD
+	@git -C $(EMU_DIR) log -1 --format="emu8051 @ %h %ad" --date=short
 
 fetch: $(EMU_DIR)
 

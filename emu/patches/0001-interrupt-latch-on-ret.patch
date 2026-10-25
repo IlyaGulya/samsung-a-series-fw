@@ -3,8 +3,8 @@
 @@
  static uint8_t ret(struct em8051 *aCPU)
  {
-+    /* Эта прошивка выходит из ISR через банковый трамплин (push DPH/DPL; RET),
-+       поэтому снимаем in-service latch и по RET, а не только по RETI. */
++    /* This firmware can leave an ISR through a bank trampoline (push DPH/DPL, RET).
++       Clear the in-service latch on RET as well as on RETI. */
 +    aCPU->mInterruptActive = 0;
      PC = pop_from_stack(aCPU) << 8;
 *** End Patch

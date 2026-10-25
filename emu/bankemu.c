@@ -1,11 +1,11 @@
-/* bankemu — запуск полного 2 MiB образа Samsung FALCON (M-A8000SGZA) на emu8051.
+/* bankemu: run the full 2 MiB Samsung FALCON image (M-A8000SGZA) on emu8051.
  *
- * Требует ядро emu8051 (MIT): https://github.com/jarikomppa/emu8051
- * и патч на latch прерываний (см. emu/patches/).
+ * Needs the emu8051 core (MIT): https://github.com/jarikomppa/emu8051
+ * and the interrupt-latch patch (see emu/patches/).
  *
- * Ключевое отличие от harness: моделируется банковое переключение кода.
- * P1[4:0] = номер банка (32 банка по 64 KiB), P1[7:5] = страпы борды.
- * Байт-код в любом банке адресует 64 KiB; переключение P1 меняет окно кода.
+ * Main difference from a plain 8051 run: code banking.
+ * P1[4:0] is the bank number (32 banks of 64 KiB). P1[7:5] are board straps.
+ * Code in any bank addresses 64 KiB. A P1 write moves the code window.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,18 +51,18 @@ static void set_bank(int b)
 }
 
 static unsigned long xr_count[MEMSZ], xw_count2[MEMSZ];
-/* карта окна shared memory 0xA000..0xBFFF */
+/* map of the shared-memory window 0xA000..0xBFFF */
 #define WN 0x2000
 static unsigned long ar[WN], aw[WN];
 static unsigned char aval[WN][32];
 static uint16_t apc[WN]; static unsigned char apc_set[WN];
 static int xtrace; static int watch_addr = -1; static int watch_n;
-/* SEEDR=addr:len:val — подставлять val при чтении, если ячейка всё ещё 0 */
+/* SEEDR=addr:len:val: return val on read while the cell is still zero */
 static unsigned seedr_a, seedr_l; static int seedr_v = -1;
-/* EVENTS="опкод:0xADDR=0xVAL;..." — инъекция событий от peer_ic1000 */
+/* EVENTS="opcode:0xADDR=0xVAL;...": inject events from the peer subsystem */
 static unsigned long long ev_ops[64]; static uint16_t ev_addr[64]; static uint8_t ev_val[64];
 static int ev_n, ev_i; static int pty_on; static int pty_fd = -1;
-/* модель "второго процессора" (main IC1000): отвечает на mailbox 0xFDF6/FDF7 */
+/* peer subsystem model: answers the 0xFDF6/0xFDF7 mailbox */
 static int peer_on;
 static uint8_t peer_cmd, peer_busy;
 struct stub { uint16_t a; uint8_t v; };
@@ -90,14 +90,14 @@ static uint8_t xread_cb(struct em8051 *c, uint16_t a)
     if (seedr_v >= 0 && a >= seedr_a && a < seedr_a + seedr_l && c->mExtData[a] == 0)
         return (uint8_t)seedr_v;
     if (peer_on && a == 0xFDF7) {
-        if (peer_busy) { peer_busy = 0; return 0x81; }  /* ack от IC1000 */
+        if (peer_busy) { peer_busy = 0; return 0x81; }  /* ack from the peer */
         return 0x41;
     }
     if (a >= 0xE000) {
         if (policy == 1) return 0xFF;
         if (a == 0xF072) return 0x0C;   /* bit2/bit3: UART TX ready */
-        if (a == 0xF036) return 0x04;   /* второй канал */
-        /* ЭМУЛЯЦИЯ РЕГИСТРА: писал — читай записанное (как в железе) */
+        if (a == 0xF036) return 0x04;   /* second channel */
+        /* REGISTER MODEL: a read returns the last written value, as on hardware */
         if (xw_count2[a]) return c->mExtData[a];
         return 0x00;
     }
@@ -143,7 +143,7 @@ static void sfr_dbg(struct em8051 *c, uint8_t reg)
     if (!dbg_sfr) return;
     if ((reg == 0xA8 || reg == 0x89 || reg == 0x88) && sfr_log < 30) {
         sfr_log++;
-        printf("  [SFR] IE=0x%02X TMOD=0x%02X TCON=0x%02X  (запись 0x%02X)\n",
+        printf("  [SFR] IE=0x%02X TMOD=0x%02X TCON=0x%02X  (write 0x%02X)\n",
                c->mSFR[REG_IE], c->mSFR[REG_TMOD], c->mSFR[REG_TCON], reg);
     }
 }
@@ -156,7 +156,7 @@ static void p1_write(struct em8051 *c, uint8_t reg)
 
 static void trace_erased(uint16_t pc, unsigned long long op)
 {
-    printf("\n[!] op=%llu PC=0x%04X — заход в стёртую область банка. Назад 22:\n", op, pc);
+    printf("\n[!] op=%llu PC=0x%04X: entered erased flash. Previous 22:\n", op, pc);
     for (int i = 22; i > 0; i--) {
         uint16_t a = ring[(ring_pos - i) & 511];
         int b = 0;
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
     cpu.mUpperData = upper;
     reset(&cpu, false);
     memset(extdat, 0, MEMSZ);
-    if (getenv("SEED")) {   /* SEED=addr:len:val — заполнить область XDATA */
+    if (getenv("SEED")) {   /* SEED=addr:len:val: fill an XDATA region */
         unsigned a, l, v;
         if (sscanf(getenv("SEED"), "0x%x:0x%x:0x%x", &a, &l, &v) == 3)
             for (unsigned i = 0; i < l && a + i < MEMSZ; i++) extdat[a + i] = (unsigned char)v;
@@ -242,7 +242,7 @@ int main(int argc, char **argv)
     if (getenv("PTY")) {
         int m; if (openpty(&pty_fd, &m, NULL, NULL, NULL) == 0) {
             char *nm = ttyname(m);
-            fprintf(stderr, "[pty] UART монитора: %s\n", nm ? nm : "?");
+            fprintf(stderr, "[pty] monitor UART: %s\n", nm ? nm : "?");
         }
     }
     conslog = fopen("console.log", "w");
@@ -281,7 +281,7 @@ int main(int argc, char **argv)
             }
             if (pc <= 3) {
                 if (getenv("DEBUG_RESET") && resets < 2 && ops_run > 1000) {
-                    printf("\n[RESET] op=%llu bank=%d — назад 26:\n", ops_run,
+                    printf("\n[RESET] op=%llu bank=%d: previous 26:\n", ops_run,
                            (int)((cpu.mCodeMem - image) / MEMSZ));
                     for (int i = 26; i > 0; i--) {
                         uint16_t a = ring[(ring_pos - i) & 511];
@@ -327,12 +327,12 @@ int main(int argc, char **argv)
             while (k < 16 && cpu.mCodeMem[(pc + k) & 0xFFFF] == 0xFF) k++;
             if (k == 16) {
                 if (getenv("HALT_ERASED")) {
-                    printf("[HALT] %.1f ms: PC=0x%04X bank=%d ушёл в стёртую область\n",
+                    printf("[HALT] %.1f ms: PC=0x%04X bank=%d entered erased flash\n",
                            (double)(ticks_run - t_firstline) / 1000.0, pc,
                            (int)((cpu.mCodeMem - image) / MEMSZ));
                     break;
                 }
-                printf("\n[!] op=%llu PC=0x%04X bank=%d — стёртая область. Назад 26:\n",
+                printf("\n[!] op=%llu PC=0x%04X bank=%d: erased flash. Previous 26:\n",
                        ops_run, pc, (int)((cpu.mCodeMem - image) / MEMSZ));
                 for (int i = 26; i > 0; i--) {
                     uint16_t a = ring[(ring_pos - i) & 511];
@@ -355,11 +355,11 @@ int main(int argc, char **argv)
            path, ops_run, cpu.mPC, (int)((cpu.mCodeMem - image) / MEMSZ),
            bank_switches, resets, cov, cons_bytes);
     if (xtrace) {
-        printf("-- окно 0xA000..0xBFFF: адреса, которые ТОЛЬКО читаются (входы извне) --\n");
+        printf("-- window 0xA000..0xBFFF: read-only addresses (external inputs) --\n");
         int shown = 0;
         for (int i = 0; i < WN && shown < 24; i++) {
             if (!ar[i] || aw[i]) continue;
-            printf("  0x%04X  R x%-8lu  первый read @pc=0x%04X:", 0xA000 + i, ar[i], apc[i]);
+            printf("  0x%04X  R x%-8lu  first read @pc=0x%04X:", 0xA000 + i, ar[i], apc[i]);
             for (int k = 0; k < 10; k++) {
                 char b[64] = {0}; unsigned len = decode(&cpu, (uint16_t)(apc[i] + k), b);
                 printf(" | %s", b); (void)len;
@@ -368,7 +368,7 @@ int main(int argc, char **argv)
             printf("\n");
             shown++;
         }
-        printf("-- окно: адреса с записями (инициализируются прошивкой) --\n");
+        printf("-- window: written addresses (initialized by the firmware) --\n");
         shown = 0;
         for (int i = 0; i < WN && shown < 12; i++) {
             if (!aw[i]) continue;
@@ -377,7 +377,7 @@ int main(int argc, char **argv)
         }
     }
     if (getenv("GAP")) {
-        printf("-- топ инструкций в окне 490..3780 ms --\n");
+        printf("-- top instructions in the 490..3780 ms window --\n");
         for (int k = 0; k < 10; k++) {
             unsigned long best = 0; int bp = -1;
             for (int i = 0; i < MEMSZ; i++) if (gap_hist[i] > best) { best = gap_hist[i]; bp = i; }
@@ -388,10 +388,10 @@ int main(int argc, char **argv)
         }
     }
     if (t_sleep)
-        printf("вход в цикл сна: %.1f ms после первой строки лога\n",
+        printf("sleep loop entry: %.1f ms after the first log line\n",
                (double)(t_sleep - t_firstline) / 1000.0);
-    printf("ISR(0x3000) входов: %llu\n", isr_hits);
-    printf("-- топ XDATA чтений (что опрашивает) --\n");
+    printf("ISR(0x3000) entries: %llu\n", isr_hits);
+    printf("-- top XDATA reads (what it polls) --\n");
     for (int k = 0; k < 10; k++) {
         int best = -1; unsigned long bv = 0;
         for (int i = 0; i < MEMSZ; i++) if (xr_count[i] > bv) { bv = xr_count[i]; best = i; }
@@ -399,8 +399,8 @@ int main(int argc, char **argv)
         printf("  0x%04X  R x%-9lu  W x%lu\n", best, bv, xw_count2[best]);
         xr_count[best] = 0;
     }
-    printf("-- задействованные банки --\n");
+    printf("-- banks used --\n");
     for (int i = 0; i < NBANKS; i++)
-        if (bank_hist[i]) printf("  bank %2d: %10llu опкодов\n", i, bank_hist[i]);
+        if (bank_hist[i]) printf("  bank %2d: %10llu opcodes\n", i, bank_hist[i]);
     return 0;
 }

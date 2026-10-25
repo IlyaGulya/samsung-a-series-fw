@@ -1,69 +1,77 @@
-# Samsung A-series monitor firmware (FALCON / M-A8000SGZA) — research toolkit
+# Samsung A-series monitor firmware toolkit
 
-Инструменты и заметки по прошивке мониторов Samsung линейки A70/A80 (`LS27A70*`,
-`LS27A80*`, `LS32A70*`, `LS32A80*`), внутреннее имя платформы — **FALCON**.
+Tools and notes for the firmware of Samsung A70/A80 monitors
+(`LS27A70*`, `LS27A80*`, `LS32A70*`, `LS32A80*`).
+Internal platform name: **FALCON**. Image name: `M-A8000SGZA`.
 
-Репозиторий **не содержит файлов прошивок**. Образ нужно получить самостоятельно со
-страницы поддержки Samsung для своей модели (`Support → Download → Upgrade File`).
+This repository **contains no firmware files**.
+Download the image from the Samsung support page for your model
+(`Support → Download → Upgrade File`).
 
-Собранного здесь хватает, чтобы:
-- разобрать контейнер и проверить целостность образа;
-- понять раскладку и банковую адресацию кода;
-- запустить образ в эмуляторе 8051 (без QEMU — 8051 там нет);
-- читать отладочную консоль UART, если до неё доберётесь.
+## What you can do
 
-## Быстрый старт
+- Read the image layout. Check the image checksum.
+- Repack a modified image with a correct version and checksum.
+- Run the image in an 8051 emulator.
+- Read the debug console over UART.
+
+## Quick start
 
 ```bash
-# 1. положить образ рядом (например fw/M-A8000SGZA-1014.0[288E].Bin)
+# 1. Check an image (put it anywhere, for example fw/)
 python3 tools/fwtool.py info   "fw/M-A8000SGZA-1014.0[288E].Bin"
 python3 tools/fwtool.py verify "fw/M-A8000SGZA-1014.0[288E].Bin"
 
-# 2. эмулятор (нужен emu8051 core, MIT)
+# 2. Build and run the emulator (downloads the MIT-licensed 8051 core)
 make emu
-cd emu && PEER=1 STUBS="0xD511=0x17,0xF012=0x01" ./bankemu ../fw/M-A8000SGZA-1014.0[288E].Bin 40000000
+PEER=1 STUBS="0xD511=0x17,0xF012=0x01" ./emu/bankemu fw/fw1014.bin 40000000
 
-# 3. тесты инструмента
+# 3. Run the tests
 make test
 ```
 
-## Что это за прошивка
+## What the firmware is
 
-Системная прошивка **скалера** (в сервисном меню поле `Scaler-MCU` показывает
-`Novatek`; ядро — 8051). Она отвечает за последовательность питания, HPD, панель,
-EDID, клавиши, USB-хаб, обновление и обмен с видеоблоком.
+It is the system firmware of the **scaler**. The service menu shows
+`Scaler-MCU: Novatek`, and the CPU core is an 8051.
+The firmware controls power sequencing, HPD, the panel, EDID, keys, the USB hub,
+updates, and the link to the video block.
 
-Это **не** та часть, что рисует картинку: масштабирование и OSD живут в другой
-подсистеме, её образа в этом файле нет.
+It does **not** draw the picture. Scaling and OSD run in another subsystem.
+That firmware is not part of this file.
 
-## Документация
+## Documents
 
-| Файл | О чём |
+| File | Content |
 |---|---|
-| [docs/format.md](docs/format.md) | контейнер: размер, страницы, версия, контрольная сумма, A/B |
-| [docs/architecture.md](docs/architecture.md) | 8051, банки по `P1[4:0]`, трамплины, сон |
-| [docs/debug-console.md](docs/debug-console.md) | UART/MMIO, карта регистров, меню консоли |
-| [docs/emulation.md](docs/emulation.md) | эмулятор: что работает, чего не хватает, флаги |
-| [patches/](patches/) | примеры минимальных правок (смещение + байты) |
+| [docs/format.md](docs/format.md) | image layout, version string, checksum, A/B partitions |
+| [docs/architecture.md](docs/architecture.md) | 8051, code banks, cross-bank calls, sleep loop |
+| [docs/debug-console.md](docs/debug-console.md) | UART registers, console menus, service menu |
+| [docs/emulation.md](docs/emulation.md) | emulator: what works, what is missing, options |
+| [patches/](patches/) | example patch: offset and bytes |
 
-## Статус
+## Status
 
-- формат и контрольная сумма — проверены на двух версиях (`1013`, `1014`);
-- в эмуляторе прошивка проходит инициализацию, читает версию и panel info,
-  управляет HPD и уходит в штатный сон;
-- дальше (OSD, входы, HDCP) — обмен со второй подсистемой, его в образе нет.
+- Format and checksum are verified on two releases (`1013`, `1014`).
+- In the emulator the firmware completes init, reads its version and panel info,
+  drives HPD, and enters its normal sleep state.
+- The firmware does not reach OSD or input switching. That part needs the second
+  subsystem, which is not in the image.
 
-## Безопасность
+## Safety
 
-Всё, что меняет образ, ставит монитор под риск. Прежде чем что-то заливать:
+Any change to the image puts the monitor at risk. Before you flash:
 
-1. снимите состояние через сервисное меню (`Version`, `Checksum`, `Monitor On Time`);
-2. убедитесь, что умеете откатиться (A/B-партиции + повторная заливка по SERVICE);
-3. держите под рукой программатор SPI (CH341A + прищепка SOIC-8) как последний рубеж.
+1. Record the state from the service menu: `Version`, `Checksum`, `Monitor On Time`.
+2. Make sure you can recover: A/B partitions, then a second flash over SERVICE.
+3. Keep an SPI programmer (CH341A with a SOIC-8 clip) as the last option.
 
-Никогда не публикуйте и не коммитьте сам `.Bin` — это чужой копирайт.
+Do not commit or publish the vendor `.Bin` file. It is copyrighted.
 
-## Лицензия
+## Credits and license
 
-Код в репозитории — MIT (см. [LICENSE](LICENSE)). Документация описывает формат
-и поведение в исследовательских целях; товарные знаки принадлежат Samsung.
+- 8051 CPU core: [jarikomppa/emu8051](https://github.com/jarikomppa/emu8051) (MIT).
+  The build fetches a pinned commit and applies one small patch
+  (`emu/patches/0001-interrupt-latch-on-ret.patch`).
+- Everything else in this repository: MIT, see [LICENSE](LICENSE).
+- The notes describe a format for research. Samsung trademarks belong to Samsung.

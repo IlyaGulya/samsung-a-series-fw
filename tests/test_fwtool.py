@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Тесты fwtool на синтетическом образе (никаких файлов Samsung)."""
+"""Tests for fwtool on a synthetic image. No Samsung files are used."""
 import subprocess
 import sys
 import tempfile
@@ -20,7 +20,7 @@ def make_image() -> bytes:
         data[base:base + 3] = b"\x02\x01\x1f"          # LJMP 0x011F
         data[base + 0x100:base + 0x106] = b"DUALFW"
     data[VER_OFF:VER_OFF + len(VERSION)] = VERSION
-    data[0x1000:0x1004] = b"LS32"                       # модель в таблице
+    data[0x1000:0x1004] = b"LS32"                       # model string
     return bytes(data)
 
 
@@ -62,7 +62,7 @@ def main() -> int:
         assert (sum(patched) & 0xFFFF) == expected_tag + 1
 
         r = run("retag", str(good), str(tmp / "x.bin"), "too-short")
-        assert r.returncode == 1, "должен отказать при неверной длине версии"
+        assert r.returncode == 1, "must reject a wrong version length"
 
     print("ok: fwtool info/verify/retag")
     return 0

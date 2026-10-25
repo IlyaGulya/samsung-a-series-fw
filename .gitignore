@@ -1,17 +1,17 @@
-# Локальные артефакты и чужие файлы — не публикуются.
+# Local artifacts and third-party files. Do not publish.
 
-# образы прошивок Samsung (копирайт) и производные
+# vendor firmware images (copyright) and derivatives
 fw/
 *.Bin
 *.bin
 
-# сгенерированное
+# generated
 *.hex
 *.log
 __pycache__/
 *.pyc
 
-# клон ядра эмулятора
+# emulator core clone
 emu/emu8051/
 emu/bankemu
 

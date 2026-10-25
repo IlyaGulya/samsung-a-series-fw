@@ -1,37 +1,38 @@
-# Отладочная консоль и MMIO
+# Debug console and MMIO
 
-Прошивка содержит полноценную отладочную консоль с ANSI-цветами. Вывод идёт
-**не** через классический `SBUF`, а через регистры, отображённые в XDATA.
+The firmware has a full debug console with ANSI colors.
+It does **not** use the classic `SBUF` register.
+It writes to registers mapped in XDATA.
 
-## Регистры
+## Registers
 
-| Адрес | Направление | Назначение |
+| Address | Direction | Purpose |
 |---|---|---|
-| `0xF072` | R | статус: `bit0` — готовность от видеоблока, `bit2`/`bit3` — TX ready двух каналов |
-| `0xF073` | W | данные UART #0 |
-| `0xF036` | R | статус UART #1 (`bit2` — TX ready) |
-| `0xF037` | W | данные UART #1 |
-| `0xF074` | R | данные от видеоблока |
-| `0xBB00` | W | mailbox в сторону видеоблока |
-| `0xFDF6` / `0xFDF7` | RW | командный mailbox: запрос `0x41`, ответ `0x81` |
-| `0xF00A` | W | тестовый регистр (пишут `0x55`) |
-| `0xD511` / `0xD510` | R | код события/состояния для wake-рутинны |
-| `0xD5FD` / `0xD5FE` | RW | счётчики/статус, читаются таймерным ISR |
+| `0xF072` | R | status: `bit0` ready from video block, `bit2`/`bit3` TX ready of two channels |
+| `0xF073` | W | UART #0 data |
+| `0xF036` | R | UART #1 status (`bit2` TX ready) |
+| `0xF037` | W | UART #1 data |
+| `0xF074` | R | data from video block |
+| `0xBB00` | W | mailbox to video block |
+| `0xFDF6` / `0xFDF7` | RW | command mailbox: request `0x41`, answer `0x81` |
+| `0xF00A` | W | test register (writes `0x55`) |
+| `0xD511` / `0xD510` | R | event/state code for the wake routine |
+| `0xD5FD` / `0xD5FE` | RW | counters and status read by the timer ISR |
 
-Цикл передачи (дизассемблер):
+The transmit loop:
 
 ```
 0x55A9  MOV  DPTR,#0xF072
 0x55AC  MOVX A,@DPTR
-0x55AD  JNB  ACC.2,0x55A9     ; ждём TX ready
+0x55AD  JNB  ACC.2,0x55A9     ; wait for TX ready
 0x55B0  MOV  DPTR,#0xF073
 0x55B4  MOVX @DPTR,A
 ```
 
-Скорость: в строках консоли есть переключение `UART3` на `115200` и `9600`,
-рабочая — **115200 8N1**, 3.3 В TTL.
+Speed: the console strings change `UART3` between `115200` and `9600`.
+The working setting is **115200 8N1**, 3.3 V TTL.
 
-## Что печатает при загрузке
+## Boot output
 
 ```
 sr = 0
@@ -44,11 +45,11 @@ InitCop End
 [D1][SystemHPDControlOff] [HPD] Set HPD Low(channel:0x2, force:1)
 ```
 
-Формат сообщений: `[0;33m…[0;m` — обычные ANSI-коды.
+Messages start with `[0;33m` and end with `[0;m`. These are ANSI codes.
 
-## Меню консоли
+## Console menus
 
-Строки из образа (порядок сохранён):
+Strings from the image, in order:
 
 ```
 [Formal debug Menu]     1..5: OSD/MDHDLR/LINKHDLR/SYNCHDLR state, virtual key
@@ -57,23 +58,26 @@ InitCop End
 [SecLib debug Menu]     Common / EDID / Factory / OSD / Picture / Screen /
                         Sound / Source / T-Con
 [SecLib Source debug]   change source, check state, control hotplug,
-                        CCG3 (PD) и RTS5411 (USB hub) диагностика
-[Print level]           1..12 — фильтр вывода (essential, color, osd, modeHandler,
+                        CCG3 (PD) and RTS5411 (USB hub) diagnostics
+[Print level]           1..12: output filter (essential, color, osd, modeHandler,
                         inputTiming, appEVT, compatibility, etc, tcon, sensor,
                         source, common)
 shell>                  help / reboot / factory / remote / exit
 ```
 
-Ввод защищён: `BINGO!!! MAGICKEY!!!! unlock serial input.` — последовательность
-разблокировки ищется по коду (строкой она не лежит).
+Input is locked. The unlock message is `BINGO!!! MAGICKEY!!!! unlock serial input.`
+The unlock sequence is not stored as a string. Find it in the code.
 
-## Сервисное меню OSD
+## Service menu
 
-Вход (для мониторов с jog-кнопкой): открыть OSD, выставить `Brightness = 0` и
-`Contrast = 0`, удерживать jog (ENTER/SOURCE) ~5 секунд до появления
-`SERVICE FUNCTION MENU`.
+Entry on monitors with a jog button:
 
-Поля, которые оно показывает (из строк образа):
+1. Open the OSD.
+2. Set `Brightness = 0` and `Contrast = 0`.
+3. Hold the jog button (ENTER or SOURCE) for about 5 seconds.
+4. The `SERVICE FUNCTION MENU` appears.
+
+Fields in the menu (from the image strings):
 
 ```
 Version, Monitor On Time, Panel Ch. No., On Time, Cycle, Type, Scaler-MCU,
@@ -81,4 +85,4 @@ Panel Info, Checksum, PixelShift, Country, HotPlug Time, Mute Time, USB PORT,
 Signal Noise Lv, Project Name, FlashEraseTimes, Store Mode, ERP, Off Timer Def.
 ```
 
-Ничего в нём не менять, если цель — только прочитать состояние.
+Do not change values in this menu if you only want to read the state.

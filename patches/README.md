@@ -1,46 +1,48 @@
-# Примеры правок
+# Example patches
 
-Здесь только описания: **смещение + байты до/после**. Сами образы не публикуются.
+This directory describes changes only: offset and bytes.
+No firmware images are published.
 
-После любой правки:
+After any edit, rebuild the file name and the checksum:
 
 ```bash
 python3 tools/fwtool.py retag original.Bin patched.Bin M-A8000SGZA-1015.0
-# → пересчитанная контрольная сумма и новое имя с тегом [XXXX]
 ```
 
-Апдейтер, судя по строкам образа, сравнивает версию и сумму; тег должен совпасть
-с содержимым, а версия — быть не ниже текущей.
+The updater, based on strings in the image, compares the version and the sum.
+The tag must match the contents. The version must be equal or higher than the
+current one.
 
 ---
 
-## 0001 — пропуск проверки в банке 27
+## 0001: skip the page 27 check
 
-Единственная известная проверка, которая в эмуляторе не проходит из-за
-отсутствующей shared memory. На реальном железе проходит штатно, поэтому патч
-имеет смысл только для эмуляции.
+This is the only known check that fails in the emulator, because shared memory
+is missing. On real hardware the check passes. So this patch is useful for
+emulation only.
 
 ```
-смещение : 27 * 0x10000 + 0x1B3F = 0x1B1B3F
-было     : 60 03        JZ  +3
-стало    : 80 03        SJMP +3      (проверка всегда успешна)
-эффект   : tag 288E → 28AE
+offset : 27 * 0x10000 + 0x1B3F = 0x1B1B3F
+before : 60 03        JZ  +3
+after  : 80 03        SJMP +3      (the check always passes)
+effect : tag 288E -> 28AE
 ```
 
-Контекст:
+Context:
 
 ```
 0x1B39  SWAP A
 0x1B3A  RRC  A
 0x1B3B  ANL  A,#7
-0x1B3D  XRL  A,#5        ; ожидается 5
-0x1B3F  JZ   +3          ; ← патчится
-0x1B41  LJMP 0x1E73      ; иначе — уход в перезагрузку
+0x1B3D  XRL  A,#5        ; expects 5
+0x1B3F  JZ   +3          ; patched
+0x1B41  LJMP 0x1E73      ; otherwise: reboot
 ```
 
-Проверяемый байт должен иметь биты 7..5 = `101` (то есть лежать в `0xA0..0xBF`).
+The byte under test must have bits 7..5 equal to `101`, that is, a value in
+`0xA0..0xBF`.
 
-Однострочно:
+One-line patch:
 
 ```bash
 python3 - <<'PY'
