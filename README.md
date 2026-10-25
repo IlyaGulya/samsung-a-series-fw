@@ -8,6 +8,8 @@ This repository **contains no firmware files**.
 `tools/fetch_fw.py` downloads the image from Samsung's own server; nothing is
 redistributed here.
 
+Requirements: Python 3.10+, a C compiler, git.
+
 ## What you can do
 
 - Download the official image and check its checksum.
@@ -19,12 +21,13 @@ redistributed here.
 ## Quick start
 
 ```bash
-# 1. Get the image. The script reads the vendor support page, takes the newest
-#    firmware, downloads it from Samsung, and checks the checksum.
-python3 tools/fetch_fw.py --page \
-    https://www.samsung.com/hk_en/support/model/LS32A700NWCXXK/ -o fw/
+# 1. Get the image. Reads the vendor support page, takes the newest firmware,
+#    downloads it from Samsung, and checks the checksum.
+make fw
+#    For another model, pass its support page:
+make fw MODEL_PAGE=https://www.samsung.com/<region>/support/model/<code>/
 
-#    Replace the page URL with your own model. To only list what is available:
+#    To list what is available for a model:
 python3 tools/fetch_fw.py --page <url> --list
 
 # 2. Check any image you already have
@@ -49,6 +52,14 @@ updates, and the link to the video block.
 
 It does **not** draw the picture. Scaling and OSD run in another subsystem.
 That firmware is not part of this file.
+
+## Tools
+
+| Tool | Purpose |
+|---|---|
+| `tools/fetch_fw.py` | download the official image and verify it |
+| `tools/fwtool.py` | inspect, verify, repack (version and checksum) |
+| `emu/bankemu.c` | run the image in an 8051 emulator |
 
 ## Documents
 
