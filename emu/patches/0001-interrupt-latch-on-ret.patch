@@ -1,0 +1,10 @@
+--- a/opcodes.c
++++ b/opcodes.c
+@@
+ static uint8_t ret(struct em8051 *aCPU)
+ {
++    /* Эта прошивка выходит из ISR через банковый трамплин (push DPH/DPL; RET),
++       поэтому снимаем in-service latch и по RET, а не только по RETI. */
++    aCPU->mInterruptActive = 0;
+     PC = pop_from_stack(aCPU) << 8;
+*** End Patch
