@@ -15,12 +15,11 @@ $(EMU_DIR):
 	git -C $(EMU_DIR) checkout -q FETCH_HEAD
 	@git -C $(EMU_DIR) log -1 --format="emu8051 @ %h %ad" --date=short
 
-# Use your own model page here. Only some regional pages publish the catalogue;
-# check with: python3 tools/fetch_fw.py --page <url> --list
-MODEL_PAGE ?= https://www.samsung.com/ru/support/model/LS32A700NWIXCI/
+# Pick a model code; the script finds a region page that publishes the catalogue.
+MODEL ?= LS32A700NWIXCI
 
 fw:
-	python3 tools/fetch_fw.py --page "$(MODEL_PAGE)" -o fw
+	python3 tools/fetch_fw.py --model "$(MODEL)" -o fw
 
 fetch: $(EMU_DIR)
 

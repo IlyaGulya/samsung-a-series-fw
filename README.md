@@ -21,13 +21,13 @@ Requirements: Python 3.10+, a C compiler, git.
 ## Quick start
 
 ```bash
-# 1. Get the image. Reads the vendor support page, takes the newest firmware,
-#    downloads it from Samsung, and checks the checksum.
+# 1. Get the image. Finds a region page that publishes the catalogue, takes the
+#    newest firmware, downloads it from Samsung, and checks the checksum.
 make fw
-#    Default page: LS32A700NWIXCI (RU). For another model:
-make fw MODEL_PAGE=https://www.samsung.com/<region>/support/model/<code>/
-#    Not every regional page publishes the catalogue. Check first:
-python3 tools/fetch_fw.py --page <url> --list
+#    Another model:
+make fw MODEL=LS32A700NWCXXK
+#    Only list what is available for a model:
+python3 tools/fetch_fw.py --model LS32A700NWIXCI --list
 
 #    To list what is available for a model:
 python3 tools/fetch_fw.py --page <url> --list
