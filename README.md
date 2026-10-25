@@ -5,12 +5,13 @@ Tools and notes for the firmware of Samsung A70/A80 monitors
 Internal platform name: **FALCON**. Image name: `M-A8000SGZA`.
 
 This repository **contains no firmware files**.
-Download the image from the Samsung support page for your model
-(`Support → Download → Upgrade File`).
+`tools/fetch_fw.py` downloads the image from Samsung's own server; nothing is
+redistributed here.
 
 ## What you can do
 
-- Read the image layout. Check the image checksum.
+- Download the official image and check its checksum.
+- Read the image layout.
 - Repack a modified image with a correct version and checksum.
 - Run the image in an 8051 emulator.
 - Read the debug console over UART.
@@ -18,15 +19,24 @@ Download the image from the Samsung support page for your model
 ## Quick start
 
 ```bash
-# 1. Check an image (put it anywhere, for example fw/)
+# 1. Get the image. The script reads the vendor support page, takes the newest
+#    firmware, downloads it from Samsung, and checks the checksum.
+python3 tools/fetch_fw.py --page \
+    https://www.samsung.com/hk_en/support/model/LS32A700NWCXXK/ -o fw/
+
+#    Replace the page URL with your own model. To only list what is available:
+python3 tools/fetch_fw.py --page <url> --list
+
+# 2. Check any image you already have
 python3 tools/fwtool.py info   "fw/M-A8000SGZA-1014.0[288E].Bin"
 python3 tools/fwtool.py verify "fw/M-A8000SGZA-1014.0[288E].Bin"
 
-# 2. Build and run the emulator (downloads the MIT-licensed 8051 core)
+# 3. Build and run the emulator (downloads the MIT-licensed 8051 core)
 make emu
-PEER=1 STUBS="0xD511=0x17,0xF012=0x01" ./emu/bankemu fw/fw1014.bin 40000000
+PEER=1 STUBS="0xD511=0x17,0xF012=0x01" \
+    ./emu/bankemu "fw/M-A8000SGZA-1014.0[288E].Bin" 40000000
 
-# 3. Run the tests
+# 4. Run the tests
 make test
 ```
 

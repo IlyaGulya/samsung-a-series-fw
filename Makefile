@@ -4,7 +4,7 @@ EMU_DIR  := emu/emu8051
 EMU_SHA  := 5dc681275151c4a5d7b85ec9ff4ceb1b25abd5a8
 CORE     := $(EMU_DIR)/core.c $(EMU_DIR)/opcodes.c $(EMU_DIR)/disasm.c
 
-.PHONY: all emu fetch test clean
+.PHONY: all emu fetch fw test clean
 
 all: emu
 
@@ -14,6 +14,12 @@ $(EMU_DIR):
 	git -C $(EMU_DIR) fetch -q --depth 1 origin $(EMU_SHA)
 	git -C $(EMU_DIR) checkout -q FETCH_HEAD
 	@git -C $(EMU_DIR) log -1 --format="emu8051 @ %h %ad" --date=short
+
+# Use your own model page here.
+MODEL_PAGE ?= https://www.samsung.com/hk_en/support/model/LS32A700NWCXXK/
+
+fw:
+	python3 tools/fetch_fw.py --page "$(MODEL_PAGE)" -o fw
 
 fetch: $(EMU_DIR)
 
