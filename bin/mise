@@ -1,0 +1,28 @@
+#!/bin/sh
+# Project-local mise. Downloads a pinned release on first use, so the repository
+# needs no global mise installation.
+#
+#   ./bin/mise run test
+#
+# Override the version: MISE_VERSION=2026.9.7 ./bin/mise --version
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+CACHE="$ROOT/.mise"
+BIN="$CACHE/mise"
+VERSION="${MISE_VERSION:-2026.9.7}"
+
+if [ ! -x "$BIN" ]; then
+    command -v curl >/dev/null 2>&1 || {
+        echo "curl is required to install mise" >&2
+        exit 1
+    }
+    echo "installing mise $VERSION into $CACHE ..." >&2
+    mkdir -p "$CACHE"
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL https://mise.run -o "$tmp"
+    MISE_VERSION="$VERSION" MISE_INSTALL_PATH="$BIN" sh "$tmp"
+fi
+
+exec "$BIN" "$@"

@@ -26,7 +26,7 @@ and callbacks for SFR and XDATA.
 ## Build and run
 
 ```bash
-mise run emu                   # fetches the pinned core, applies the patch, builds
+./bin/mise run emu             # fetches the pinned core, applies the patch, builds
 PEER=1 STUBS="0xD511=0x17,0xF012=0x01" ./emu/bankemu fw/<image>.Bin 40000000
 ```
 
@@ -81,4 +81,4 @@ the firmware waits for an answer that the emulator cannot give.
 `emu/patches/0001-interrupt-latch-on-ret.patch` clears the in-service latch on
 `RET`. Without it, interrupts stop after the first one, because this firmware
 sometimes leaves an ISR through a bank trampoline instead of `RETI`.
-`mise run emu` applies the patch automatically to the pinned upstream commit.
+`./bin/mise run emu` applies the patch automatically to the pinned upstream commit.

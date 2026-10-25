@@ -9,8 +9,11 @@ This repository **contains no firmware files**.
 `tools/fetch_fw.py` downloads the image from Samsung's own server; nothing is
 redistributed here.
 
-Requirements: [mise](https://mise.jdx.dev), Python 3.10+, a C compiler, git.
-All commands run through `mise run <task>`; there is no Makefile.
+Requirements: a POSIX shell, curl, Python 3.10+, a C compiler, git.
+
+`bin/mise` installs a pinned mise release into `.mise/` on first use, so no
+global installation is needed. Use `./bin/mise run <task>`. If mise is already
+installed, plain `mise run <task>` works too.
 
 ## What you can do
 
@@ -25,10 +28,10 @@ All commands run through `mise run <task>`; there is no Makefile.
 ```bash
 # 1. Get the image. Finds a region page that publishes the catalogue, takes the
 #    newest firmware, downloads it from Samsung, and checks the checksum.
-mise run fw
+./bin/mise run fw
 #    Another model, and a listing:
-MODEL=LS32A700NWCXXK mise run fw
-mise run list
+MODEL=LS32A700NWCXXK ./bin/mise run fw
+./bin/mise run list
 
 #    To list what is available for a model:
 python3 tools/fetch_fw.py --page <url> --list
@@ -38,12 +41,12 @@ python3 tools/fwtool.py info   "fw/M-A8000SGZA-1014.0[288E].Bin"
 python3 tools/fwtool.py verify "fw/M-A8000SGZA-1014.0[288E].Bin"
 
 # 3. Build and run the emulator (fetches the pinned 8051 core)
-mise run emu
+./bin/mise run emu
 PEER=1 STUBS="0xD511=0x17,0xF012=0x01" \
     ./emu/bankemu "fw/M-A8000SGZA-1014.0[288E].Bin" 40000000
 
 # 4. Run the tests
-mise run test
+./bin/mise run test
 ```
 
 ## What the firmware is
@@ -60,11 +63,11 @@ That firmware is not part of this file.
 
 | Task | Purpose |
 |---|---|
-| `mise run fw` | download the official image and verify it |
-| `mise run list` | list firmware versions for a model |
-| `mise run emu` | fetch the pinned 8051 core and build the emulator |
-| `mise run test` | run the tool tests |
-| `mise run clean` | remove build output, the core clone and images |
+| `./bin/mise run fw` | download the official image and verify it |
+| `./bin/mise run list` | list firmware versions for a model |
+| `./bin/mise run emu` | fetch the pinned 8051 core and build the emulator |
+| `./bin/mise run test` | run the tool tests |
+| `./bin/mise run clean` | remove build output, the core clone and images |
 
 | Script | Purpose |
 |---|---|

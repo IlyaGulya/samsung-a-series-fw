@@ -12,6 +12,7 @@ __pycache__/
 *.pyc
 
 # emulator core clone
+.mise/
 emu/emu8051/
 emu/bankemu
 
