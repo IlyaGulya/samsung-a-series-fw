@@ -1,0 +1,22 @@
+[tools]
+python = "3.12"
+
+[tasks.fw]
+description = "Download the official firmware image and verify the checksum"
+run = 'python3 tools/fetch_fw.py --model "${MODEL:-LS32A700NWIXCI}" -o fw'
+
+[tasks.list]
+description = "List firmware versions available for a model"
+run = 'python3 tools/fetch_fw.py --model "${MODEL:-LS32A700NWIXCI}" --list'
+
+[tasks.emu]
+description = "Fetch the pinned 8051 core and build the emulator"
+run = "./tools/build_emu.sh"
+
+[tasks.test]
+description = "Run the tool tests"
+run = "python3 tests/test_fwtool.py"
+
+[tasks.clean]
+description = "Remove build output, the core clone and downloaded images"
+run = "rm -rf emu/bankemu emu/emu8051 fw"

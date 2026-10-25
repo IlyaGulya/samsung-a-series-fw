@@ -8,7 +8,8 @@ This repository **contains no firmware files**.
 `tools/fetch_fw.py` downloads the image from Samsung's own server; nothing is
 redistributed here.
 
-Requirements: Python 3.10+, a C compiler, git.
+Requirements: [mise](https://mise.jdx.dev), Python 3.10+, a C compiler, git.
+A `Makefile` shim is included: `make <task>` forwards to mise.
 
 ## What you can do
 
@@ -23,11 +24,10 @@ Requirements: Python 3.10+, a C compiler, git.
 ```bash
 # 1. Get the image. Finds a region page that publishes the catalogue, takes the
 #    newest firmware, downloads it from Samsung, and checks the checksum.
-make fw
-#    Another model:
-make fw MODEL=LS32A700NWCXXK
-#    Only list what is available for a model:
-python3 tools/fetch_fw.py --model LS32A700NWIXCI --list
+mise run fw
+#    Another model, and a listing:
+MODEL=LS32A700NWCXXK mise run fw
+mise run list
 
 #    To list what is available for a model:
 python3 tools/fetch_fw.py --page <url> --list
@@ -36,13 +36,13 @@ python3 tools/fetch_fw.py --page <url> --list
 python3 tools/fwtool.py info   "fw/M-A8000SGZA-1014.0[288E].Bin"
 python3 tools/fwtool.py verify "fw/M-A8000SGZA-1014.0[288E].Bin"
 
-# 3. Build and run the emulator (downloads the MIT-licensed 8051 core)
-make emu
+# 3. Build and run the emulator (fetches the pinned 8051 core)
+mise run emu
 PEER=1 STUBS="0xD511=0x17,0xF012=0x01" \
     ./emu/bankemu "fw/M-A8000SGZA-1014.0[288E].Bin" 40000000
 
 # 4. Run the tests
-make test
+mise run test
 ```
 
 ## What the firmware is
@@ -55,12 +55,21 @@ updates, and the link to the video block.
 It does **not** draw the picture. Scaling and OSD run in another subsystem.
 That firmware is not part of this file.
 
-## Tools
+## Tools and tasks
 
-| Tool | Purpose |
+| Task | Purpose |
 |---|---|
-| `tools/fetch_fw.py` | download the official image and verify it |
+| `mise run fw` | download the official image and verify it |
+| `mise run list` | list firmware versions for a model |
+| `mise run emu` | fetch the pinned 8051 core and build the emulator |
+| `mise run test` | run the tool tests |
+| `mise run clean` | remove build output, the core clone and images |
+
+| Script | Purpose |
+|---|---|
+| `tools/fetch_fw.py` | region discovery, download, checksum check |
 | `tools/fwtool.py` | inspect, verify, repack (version and checksum) |
+| `tools/build_emu.sh` | pinned core checkout, patch, compile |
 | `emu/bankemu.c` | run the image in an 8051 emulator |
 
 ## Documents

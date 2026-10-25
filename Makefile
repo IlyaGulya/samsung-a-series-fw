@@ -1,42 +1,15 @@
-EMU_REPO := https://github.com/jarikomppa/emu8051.git
-EMU_DIR  := emu/emu8051
-# pinned commit: upstream is dormant, but master is not a guarantee
-EMU_SHA  := 5dc681275151c4a5d7b85ec9ff4ceb1b25abd5a8
-CORE     := $(EMU_DIR)/core.c $(EMU_DIR)/opcodes.c $(EMU_DIR)/disasm.c
+# Thin shim. Tasks live in mise.toml; this file only forwards to mise,
+# for muscle memory and CI that expect make. mise must be installed.
 
-.PHONY: all emu fetch fw test clean
+MISE  ?= mise
+TASKS := fw list emu test clean
+
+.PHONY: all $(TASKS)
 
 all: emu
 
-$(EMU_DIR):
-	git init -q $(EMU_DIR)
-	git -C $(EMU_DIR) remote add origin $(EMU_REPO)
-	git -C $(EMU_DIR) fetch -q --depth 1 origin $(EMU_SHA)
-	git -C $(EMU_DIR) checkout -q FETCH_HEAD
-	@git -C $(EMU_DIR) log -1 --format="emu8051 @ %h %ad" --date=short
-
-# Pick a model code; the script finds a region page that publishes the catalogue.
-MODEL ?= LS32A700NWIXCI
-
-fw:
-	python3 tools/fetch_fw.py --model "$(MODEL)" -o fw
-
-fetch: $(EMU_DIR)
-
-$(CORE): | $(EMU_DIR)
-
-$(EMU_DIR)/.patched: $(EMU_DIR) emu/apply_patch.py
-	python3 emu/apply_patch.py $(EMU_DIR)
-	touch $@
-
-emu: emu/bankemu
-
-emu/bankemu: emu/bankemu.c $(CORE) $(EMU_DIR)/.patched
-	cc -O2 -o $@ emu/bankemu.c $(CORE) -I$(EMU_DIR)
-
-test:
-	python3 tests/test_fwtool.py
-
-clean:
-	rm -f emu/bankemu
-	rm -rf $(EMU_DIR)
+$(TASKS):
+	@command -v $(MISE) >/dev/null 2>&1 || { \
+		echo "mise not found. Install it: brew install mise  (https://mise.jdx.dev)"; \
+		exit 1; }
+	@$(MISE) run $@

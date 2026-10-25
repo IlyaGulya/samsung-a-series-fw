@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
 """Download an official Samsung monitor firmware image and verify it.
 
-The script reads the public support page for a model, finds the firmware
-entries in the embedded catalogue, picks the newest version, downloads the
-archive from the Samsung download centre, extracts the image and checks the
-[XXXX] tag in the file name against the checksum.
+The script reads the public support page for a model, decodes the embedded
+catalogue with json.JSONDecoder, takes the newest firmware version, downloads
+the archive from the Samsung download centre, extracts the image, and checks
+the [XXXX] tag against the checksum.
 
-Nothing is redistributed: the file comes from Samsung's own CDN.
+Nothing is redistributed: the file comes from Samsung's own server.
 
 Usage:
-  fetch_fw.py --model LS32A700NWIXCI -o fw/   # find the region page automatically
-  fetch_fw.py --page <url> -o fw/             # use a known support page
-  fetch_fw.py --page <url> --list             # only show what is available
-  fetch_fw.py --url <direct zip url> -o fw/   # skip the catalogue
+  fetch_fw.py --model LS32A700NWIXCI -o fw/   find the region page automatically
+  fetch_fw.py --model LS32A700NWIXCI --list   show what is available
+  fetch_fw.py --page <url> -o fw/             use a known support page
+  fetch_fw.py --url <direct zip url> -o fw/   skip the catalogue
 """
 import argparse
 import concurrent.futures
 import io
 import json
-import re
 import sys
 import urllib.request
 import zipfile
 from pathlib import Path
+
+from fwtool import parse_tag, read_version, tag
 
 UA = "Mozilla/5.0 (compatible; samsung-monitor-fw/1.0)"
 
@@ -35,8 +36,7 @@ REGIONS = [
     "nz", "cn", "tw", "jp", "kz", "by",
 ]
 MODEL_URL = "https://www.samsung.com/{region}/support/model/{model}/"
-TAG_RE = re.compile(r"\[([0-9A-Fa-f]{4})\]")
-VER_RE = re.compile(r"-(\d+)\.(\d+)")
+CATALOGUE_KEY = '{"softwares"'
 
 
 def fetch(url: str) -> bytes:
@@ -55,7 +55,7 @@ def probe_model(model: str, regions=None):
             html = fetch(url).decode("utf-8", "replace")
         except Exception:
             return None
-        return html if '"softwares"' in html else None
+        return html if CATALOGUE_KEY in html else None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         results = dict(zip(regions, pool.map(get, regions)))
@@ -66,33 +66,33 @@ def probe_model(model: str, regions=None):
 
 
 def extract_catalogue(html: str):
-    """Return the embedded {"softwares": [...]} object, or None."""
-    start = html.find('{"softwares"')
-    if start < 0:
-        return None
-    depth, in_str, esc = 0, False, False
-    for i in range(start, len(html)):
-        ch = html[i]
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
+    """Decode the embedded {"softwares": [...]} object, or return None."""
+    decoder = json.JSONDecoder()
+    pos = 0
+    while True:
+        pos = html.find(CATALOGUE_KEY, pos)
+        if pos < 0:
+            return None
+        try:
+            value, _ = decoder.raw_decode(html, pos)
+        except json.JSONDecodeError:
+            pos += 1
             continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(html[start:i + 1])
-                except json.JSONDecodeError:
-                    return None
-    return None
+        if isinstance(value, dict) and "softwares" in value:
+            return value
+        pos += 1
+
+
+def parse_version(text: str):
+    """'M-A8000SGZA-1014.0[288E]_USB.zip' -> (1014, 0); None if not a version."""
+    head, sep, tail = text.rpartition("-")
+    if not sep or not head.startswith("M-"):
+        return None
+    number = tail.split("[")[0]
+    major, sep, minor = number.partition(".")
+    if not sep or not major.isdigit() or not minor.isdigit():
+        return None
+    return int(major), int(minor)
 
 
 def firmware_entries(catalogue: dict):
@@ -101,11 +101,11 @@ def firmware_entries(catalogue: dict):
         name = item.get("fileName", "")
         if item.get("contentsTypeCode") != "FM":
             continue
-        m = VER_RE.search(name)
-        if not m:
+        version = parse_version(name)
+        if not version:
             continue
         out.append({
-            "version": (int(m.group(1)), int(m.group(2))),
+            "version": version,
             "file": name,
             "url": item.get("downloadUrl", ""),
             "date": item.get("fileModifiedDate", ""),
@@ -114,25 +114,23 @@ def firmware_entries(catalogue: dict):
     return out
 
 
-def pick_image(zip_bytes: bytes) -> tuple[str, bytes]:
+def pick_image(zip_bytes: bytes):
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
         names = [n for n in z.namelist() if n.lower().endswith(".bin")]
         if not names:
             raise SystemExit("archive has no .Bin file")
-        name = names[0]
-        return name, z.read(name)
+        return names[0], z.read(names[0])
 
 
 def verify(name: str, data: bytes) -> bool:
-    computed = sum(data) & 0xFFFF
-    m = TAG_RE.search(name)
-    if not m:
-        print(f"  no [TAG] in name; computed [{computed:04X}]", file=sys.stderr)
+    computed = tag(data)
+    parsed = parse_tag(name)
+    if parsed is None:
+        print(f"  no [XXXX] tag in the name; computed [{computed:04X}]", file=sys.stderr)
         return False
-    ok = int(m.group(1), 16) == computed
-    print(f"  {name}: tag {m.group(1).upper()} vs computed {computed:04X} "
-          f"-> {'OK' if ok else 'MISMATCH'}")
-    return ok
+    print(f"  {name}: tag {parsed:04X} vs computed {computed:04X} "
+          f"-> {'OK' if parsed == computed else 'MISMATCH'}")
+    return parsed == computed
 
 
 def main() -> int:
@@ -146,10 +144,10 @@ def main() -> int:
     args = ap.parse_args()
 
     outdir = Path(args.out)
-    outdir.mkdir(parents=True, exist_ok=True)
 
     if args.url:
         name, data = pick_image(fetch(args.url))
+        outdir.mkdir(parents=True, exist_ok=True)
         target = outdir / name
         target.write_bytes(data)
         print(f"saved {target}")
@@ -168,12 +166,12 @@ def main() -> int:
     else:
         ap.error("need --model, --page or --url")
 
-    cat = extract_catalogue(html)
-    if not cat:
+    catalogue = extract_catalogue(html)
+    if not catalogue:
         print("catalogue not found on the page", file=sys.stderr)
         return 1
 
-    entries = firmware_entries(cat)
+    entries = firmware_entries(catalogue)
     if not entries:
         print("no firmware entries for this model", file=sys.stderr)
         return 1
@@ -186,12 +184,12 @@ def main() -> int:
     best = entries[0]
     print(f"\ndownloading {best['file']} ...")
     name, data = pick_image(fetch(best["url"]))
+    outdir.mkdir(parents=True, exist_ok=True)
     target = outdir / name
     target.write_bytes(data)
     print(f"saved {target}  ({len(data)} bytes)")
-    print(f"version in image: ", end="")
-    m = re.search(rb"M-A[0-9A-Z]{6,}-\d+\.\d+", data)
-    print(m.group().decode() if m else "<not found>")
+    version, _ = read_version(data)
+    print(f"version in image: {version or '<not found>'}")
     return 0 if verify(name, data) else 1
 
 
