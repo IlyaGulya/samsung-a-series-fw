@@ -1,7 +1,8 @@
-# Samsung A-series monitor firmware toolkit
+# samsung-a-series-fw
 
-Tools and notes for the firmware of Samsung A70/A80 monitors
-(`LS27A70*`, `LS27A80*`, `LS32A70*`, `LS32A80*`).
+Toolkit for the firmware of Samsung A70/A80 monitors.
+
+Covers `LS27A70*`, `LS27A80*`, `LS32A70*`, `LS32A80*`.
 Internal platform name: **FALCON**. Image name: `M-A8000SGZA`.
 
 This repository **contains no firmware files**.
