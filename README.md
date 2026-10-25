@@ -9,7 +9,7 @@ This repository **contains no firmware files**.
 redistributed here.
 
 Requirements: [mise](https://mise.jdx.dev), Python 3.10+, a C compiler, git.
-A `Makefile` shim is included: `make <task>` forwards to mise.
+All commands run through `mise run <task>`; there is no Makefile.
 
 ## What you can do
 
